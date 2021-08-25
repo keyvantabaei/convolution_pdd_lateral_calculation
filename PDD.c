@@ -2,6 +2,8 @@
 #include <TFile.h>
 #include <TH1D.h>
 
+//center of cordinate is at the point if caculated dose
+
 const double number_of_primart_photon=1e6-1700; //mev
 const double _total_mass_attenuation_coefficient_0_1MeV=0.167; //cm2/g
 const double _total_mass_attenuation_coefficient_0_3MeV=0.118; //cm2/g
@@ -14,8 +16,12 @@ const double _total_mass_attenuation_coefficient_2_0MeV=0.0493; //cm2/g
 const double _total_mass_attenuation_coefficient_3_0MeV=0.0396; //cm2/g
 const double _total_mass_attenuation_coefficient_4_0MeV=0.0339; //cm2/g
 const double _total_mass_attenuation_coefficient_5_0MeV=0.0301; //cm2/g
-const double _field_size=5; //cm
 const double fluence=20000; // photon/cm2
+const double _phantom_dimention[]={20,20,20}; //cm
+const bool is_circular_field_size=true;
+const double _field_size_radius=5; //cm
+const bool is_rectangular_field_size=false;
+const double rectangular_field_size[]={10,10}; //cm
 
 
 double calculate_middle_of_the_voxel_r(double r_id)
@@ -109,13 +115,22 @@ double Calculate_Number_of_interaction(double depth /* cm */,double r ,double in
     return number_of_interaction;
 }
 
-bool check_voxel_have_interacted(double r_id)
+bool check_voxel_have_interacted(double r_id,double theta_i)
 {
     bool result=false;
-
+    double theta=calculate_middle_of_the_voxel_theta(theta_i);
     double R=calculate_middle_of_the_voxel_r(r_id);
-    if(R<=_field_size)result=true;
-    else result=false;
+    // double z=R*TMath::Cos((theta*TMath::Pi())/(180));
+
+    //caculate off axis distance
+    double off_axis_distance=R*TMath::Sin((theta*TMath::Pi())/(180));
+    if(is_circular_field_size)
+        if(2*(off_axis_distance*off_axis_distance)<=(_field_size_radius*_field_size_radius))result=true;
+        else result=false;
+    else if(is_rectangular_field_size)
+        if(off_axis_distance<(rectangular_field_size[0])/2 && off_axis_distance<(rectangular_field_size[0])/2)result=true;
+        else result=false;
+    else cout<<"---------->> field size have not chosen .";
 
     return result;
 }
@@ -158,15 +173,16 @@ TTree* Normalize(TTree* Tdose)
 bool check_if_in_the_phantom(double r_id,double theta_id,double depth)
 {
     bool result=false;
-    //calculate theta
-    double theta_respect_to_incident_photon=theta_id*3.75;
-    double theta=180-theta_respect_to_incident_photon;
-    double cos_theta=TMath::Cos((TMath::Pi()*theta)/(180));
 
-    //get middle r
+    //calculate middle of the voxel
+    double theta=calculate_middle_of_the_voxel_theta(theta_id);
     double R=calculate_middle_of_the_voxel_r(r_id);
 
-    if((R*cos_theta)<depth)result=true;
+    //calculate off axis distance and zepth respect to point of interaction
+    double off_axis_distance=R*TMath::Sin((theta*TMath::Pi())/(180));
+    double z=R*TMath::Cos((theta*TMath::Pi())/(180));
+
+    if( off_axis_distance<=(_phantom_dimention[0])/2  && (z+depth>0 && z+depth<_phantom_dimention[2])  )result=true;
     else result=false;
 
     return result;
@@ -175,7 +191,7 @@ bool check_if_in_the_phantom(double r_id,double theta_id,double depth)
 void Draw_PDD(double mass_attenuation_coefficient)
 {
 
-double point[]={0.1,0.2,0.3,0.4,0.5,0.7,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.6,7,7.5,8,8.5,9,9.5,10}; //cm
+double point[]={0.1,0.13,0.17,0.2,0.24,0.27,0.3,0.35,0.4,0.45,0.5,0.7,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.6,7,7.5,8,8.5,9,9.5,10}; //cm
 TH2D* KERNEL=CalculateKernel();
 
 double dose;
@@ -191,7 +207,7 @@ for(double depth : point)
         for(int theta_id=0;theta_id<48;theta_id++)
         {
             if(check_if_in_the_phantom(r_id,theta_id,depth))
-                if(check_voxel_have_interacted(r_id))
+                if(check_voxel_have_interacted(r_id,theta_id))
                 {
                     double No_interaction=Calculate_Number_of_interaction(depth,r_id,theta_id,mass_attenuation_coefficient);
                     double edk=GetEDK(r_id,theta_id,KERNEL);
