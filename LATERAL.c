@@ -2,7 +2,7 @@
 #include <TFile.h>
 #include <TH1D.h>
 
-//center of cordinate is at the point if caculated dose
+//center of cordinate is on the centeral axis
 
 const double number_of_primart_photon=1e6-1700; //mev
 const double _total_mass_attenuation_coefficient_0_1MeV=0.167; //cm2/g
@@ -22,6 +22,7 @@ const bool is_circular_field_size=false;
 const double _field_size_radius=5; //cm
 const bool is_rectangular_field_size=true;
 const double rectangular_field_size[]={10,10}; //cm
+const double depth=5; //cm
 
 
 double calculate_middle_of_the_voxel_r(double r_id)
@@ -60,10 +61,10 @@ double calculate_middle_of_the_voxel_theta(double interaction_point_theta_id)
     return interaction_point_theta;   
 }
 
-TH2D* CalculateKernel(TString filename)
+TH2D* CalculateKernel()
 {
         //read kernels
-        TFile* f =new TFile(filename);
+        TFile* f =new TFile("kernel1_25mev.root");
         TH2D* edepPrimaryH = (TH2D*)f->Get("2d_PrimaryedepKernels");
         TH2D* edepFirstH = (TH2D*)f->Get("2D_FirstedepKernels");
         TH2D* edepSecondH = (TH2D*)f->Get("2D_SecondedepKernels");
@@ -104,7 +105,7 @@ double GetEDK(double r,double interaction_point_theta_id,TH2D* KERNEL)
     return edk;
 }
 
-double Calculate_Number_of_interaction(double depth /* cm */,double r ,double interaction_point_theta_id,double mass_attenuation_coefficient)   // photons/g
+double Calculate_Number_of_interaction(double r ,double interaction_point_theta_id,double mass_attenuation_coefficient)   // photons/g
 {
     double R=calculate_middle_of_the_voxel_r(r);
     double interaction_point_theta=calculate_middle_of_the_voxel_theta(interaction_point_theta_id);
@@ -115,23 +116,40 @@ double Calculate_Number_of_interaction(double depth /* cm */,double r ,double in
     return number_of_interaction;
 }
 
-bool check_voxel_have_interacted(double r_id,double theta_i)
+bool check_voxel_have_interacted(double r_id,double theta_i,double lateral_distance_dose_calculation_point)
 {
     bool result=false;
     double theta=calculate_middle_of_the_voxel_theta(theta_i);
     double R=calculate_middle_of_the_voxel_r(r_id);
-    // double z=R*TMath::Cos((theta*TMath::Pi())/(180));
 
     //caculate off axis distance
-    double off_axis_distance=R*TMath::Sin((theta*TMath::Pi())/(180));
-    if(is_circular_field_size)
-        if(2*(off_axis_distance*off_axis_distance)<=(_field_size_radius*_field_size_radius))result=true;
-        else result=false;
-    else if(is_rectangular_field_size)
-        if(off_axis_distance<(rectangular_field_size[0])/2 && off_axis_distance<(rectangular_field_size[0])/2)result=true;
-        else result=false;
-    else cout<<"---------->> field size have not chosen .";
+    double off_axis_distance_plus=lateral_distance_dose_calculation_point+R*TMath::Sin((theta*TMath::Pi())/(180));
+    double off_axis_distance_min=lateral_distance_dose_calculation_point-R*TMath::Sin((theta*TMath::Pi())/(180));    if(is_circular_field_size)
 
+    // double coe=1;
+    // if( off_axis_distance_plus<= rectangular_field_size[0]/2 && off_axis_distance_plus>= (-1)*rectangular_field_size[1]/2 && off_axis_distance_min<(-1)*rectangular_field_size[1]/2 )
+    //   {
+    //     double r0 = (-1)*rectangular_field_size[1]/2 - off_axis_distance_plus;
+    //     double coe=(r0)/2*(R*TMath::Sin((theta*TMath::Pi())/(180)));
+    //     // cout<<r0<<endl;
+    //   }
+    // if(off_axis_distance_min<=(rectangular_field_size[0])/2 &&
+    //   off_axis_distance_min>=((-1)*rectangular_field_size[1])/2 &&
+    //   off_axis_distance_plus>(rectangular_field_size[0])/2)
+    //   {
+    //     double r0 = rectangular_field_size[1]/2 - off_axis_distance_min;
+    //     double coe=(r0)/2*(R*TMath::Sin((theta*TMath::Pi())/(180)));
+    //     cout<<R*TMath::Sin((theta*TMath::Pi())/(180))<<endl;
+    //   }
+
+        if(
+         (off_axis_distance_plus<=rectangular_field_size[0]/2 &&
+         off_axis_distance_plus>=(-1)*rectangular_field_size[1]/2) ||
+         (off_axis_distance_min<=rectangular_field_size[0]/2 &&
+         off_axis_distance_min>=(-1)*rectangular_field_size[1]/2)
+         ){result=true;}
+        else result=false;
+cout<<result<<endl;
     return result;
 }
 
@@ -170,7 +188,7 @@ TTree* Normalize(TTree* Tdose)
         return Tpdd;
 }
 
-bool check_if_in_the_phantom(double r_id,double theta_id,double depth )
+bool check_if_in_the_phantom(double r_id,double theta_id,double lateral_distance_dose_calculation_point)
 {
     bool result=false;
 
@@ -179,122 +197,70 @@ bool check_if_in_the_phantom(double r_id,double theta_id,double depth )
     double R=calculate_middle_of_the_voxel_r(r_id);
 
     //calculate off axis distance and zepth respect to point of interaction
-    double off_axis_distance=R*TMath::Sin((theta*TMath::Pi())/(180));
+    double off_axis_distance_plus=lateral_distance_dose_calculation_point+R*TMath::Sin((theta*TMath::Pi())/(180));
+    double off_axis_distance_min=lateral_distance_dose_calculation_point-R*TMath::Sin((theta*TMath::Pi())/(180));
     double z=R*TMath::Cos((theta*TMath::Pi())/(180));
 
-    if( off_axis_distance<=(_phantom_dimention[0])/2  && (z+depth>0 && z+depth<_phantom_dimention[2])  )result=true;
+    if( off_axis_distance_plus<=(_phantom_dimention[0])/2  && off_axis_distance_min>=((-1)*_phantom_dimention[0])/2 && (z>(-1)*depth && z<_phantom_dimention[2]-depth)  )result=true;
     else result=false;
-
     return result;
 }
 
-TTree* Get_TTree_PPD(TH2D* KERNEL,double mass_attenuation_coefficient)
+void Draw_PDD(double mass_attenuation_coefficient)
 {
+double point[80];
+double step=_phantom_dimention[0]/80; //cm
 
 // generate points
-int point_number=100;
-double point[point_number];
-double step=_phantom_dimention[0]/point_number; //cm
-for(int i=1;i<=point_number;i++)point[i-1]=(i-1)*step;
+for(int i=1;i<=80;i++)point[i-1]=((-1)*_phantom_dimention[0]/2)+(i-1)*step;
 
-//Create TTree PDD
+TH2D* KERNEL=CalculateKernel();
+
 double dose;
 double z;
 TTree* pdd = new TTree("Ntuple1", "Edep");
 pdd->Branch("d", &dose, "d/D");
 pdd->Branch("z", &z, "z/D");
 
-for(double depth : point)
+
+for(double lateral_distance : point)
 {
+    cout<<lateral_distance<<endl;
     for(int r_id=0;r_id<25;r_id++)
         for(int theta_id=0;theta_id<48;theta_id++)
         {
-            if(check_if_in_the_phantom(r_id,theta_id,depth))
-                if(check_voxel_have_interacted(r_id,theta_id))
+            if(check_if_in_the_phantom(r_id,theta_id,lateral_distance))
+                if(check_voxel_have_interacted(r_id,theta_id,lateral_distance))
                 {
-                    double No_interaction=Calculate_Number_of_interaction(depth,r_id,theta_id,mass_attenuation_coefficient);
+                    double No_interaction=Calculate_Number_of_interaction(r_id,theta_id,mass_attenuation_coefficient);
                     double edk=GetEDK(r_id,theta_id,KERNEL);
                     dose+=No_interaction*edk;
-
                 }
         }
-    z=depth;
+    z=lateral_distance;
     pdd->Fill();
     dose=0;
 }
 
-return pdd;
-}
 
-void Draw_PDD(double mass_attenuation_coefficient,double mass_attenuation_coefficient2,TString monte_carlo_data_name,TString monte_carlo_data_name2,TString kernel_data_name,TString kernel_data_name2)
-{
+auto Tpdd=Normalize(pdd);
 
-//get kernels
-TH2D* KERNEL=CalculateKernel(kernel_data_name);
-TH2D* KERNEL2=CalculateKernel(kernel_data_name2);
-
-
-auto Tpdd=Normalize(Get_TTree_PPD(KERNEL,mass_attenuation_coefficient));
-auto Tpdd2=Normalize(Get_TTree_PPD(KERNEL2,mass_attenuation_coefficient2));
-
-//create canvas
 TCanvas* c1 = new TCanvas("c1", "  ");
-
-//get monte carlo pdds
-TFile* monte_carlo_data =new TFile(monte_carlo_data_name);
-TTree* tree = (TTree*)monte_carlo_data->Get("Ntuple1");
-TFile* monte_carlo_data2 =new TFile(monte_carlo_data_name2);
-TTree* tree2 = (TTree*)monte_carlo_data2->Get("Ntuple1");
-
-//monte carlo pdd to histograms
-TH1D* hist=new TH1D("h","s",100,0,20);
-double z;
-double pdd;
-tree->SetBranchAddress("edep",&pdd);
-tree->SetBranchAddress("Z",&z);
-for(int i=0; i<tree->GetEntries(); i++)
-{
-    tree->GetEntry(i);
-    hist->SetBinContent(z,pdd);
-}
-//2
-TH1D* hist2=new TH1D("h","s",100,0,20);
-double z2;
-double pdd2;
-tree2->SetBranchAddress("edep",&pdd2);
-tree2->SetBranchAddress("Z",&z2);
-for(int i=0; i<tree2->GetEntries(); i++)
-{
-    tree2->GetEntry(i);
-    hist2->SetBinContent(z2,pdd2);
-}
-//set dot style for data
-Tpdd->SetMarkerStyle(21);
-Tpdd2->SetMarkerStyle(22);
-hist->SetMarkerStyle(25); 
-hist2->SetMarkerStyle(26); 
-
-//draw convolution calculation pdd
+TFile* f =new TFile("pdd_1_25mev_5x5.root");
+TTree* tree = (TTree*)f->Get("Ntuple1");
+Tpdd->SetMarkerStyle(26);
+tree->SetMarkerStyle(25); 
 Tpdd->Draw("d:z","","P"); 
-Tpdd2->Draw("d:z","","Psame"); 
-
-//set title and axis lables
 TH2F *htemp = (TH2F*)c1->GetPrimitive("htemp"); 
 htemp->SetTitle("Percentage Depth Dose ; Depth (cm) ; Relative Dose");
-
-
-//draw monte carlo pdd
-hist->Draw("sameP");
-hist2->Draw("sameP");
+// tree->Draw("edep:((Z/10)*2+0.1)","","same");
 gPad->Update();
 
 
 auto legend = new TLegend(0.1,0.7,0.48,0.9);
-legend->SetHeader("","");
-legend->AddEntry(Tpdd,"Convolution Calculation 4MeV","p");
-legend->AddEntry(hist,"Monte Carlo Geant4 4MeV","p"); 
-legend->AddEntry(Tpdd2,"Convolution Calculation 1.25MeV","p");
-legend->AddEntry(hist2,"Monte Carlo Geant4 1.25MeV","p"); 
+legend->SetHeader("Circular Plan 5 cm raduis","C");
+legend->AddEntry(Tpdd,"Convolution Calculation");
+legend->AddEntry(tree,"Monte Carlo Geant4"); 
 legend->SetBorderSize(0);
 legend->Draw();
 
@@ -302,17 +268,7 @@ c1->cd();
 c1->Update(); 
 }
 
-void PDD()
+void LATERAL()
 {
-    //import kernel data
-    TString kernel_data_name="kernel_4_0mev.root";
-    TString kernel_data_name2="kernel_1_25mev.root";
-
-    //import monte carlo data
-    TString monte_carlo_data_name="pdd_4_0mev_10x10.root";
-    TString monte_carlo_data_name2="pdd_1_25mev_10x10.root";
-
-    Draw_PDD(_total_mass_attenuation_coefficient_4_0MeV,_total_mass_attenuation_coefficient_1_25MeV,monte_carlo_data_name,monte_carlo_data_name2,kernel_data_name,kernel_data_name2);
-    // Draw_PDD(_total_mass_attenuation_coefficient_1_25MeV,monte_carlo_data_name2,kernel_data_name2);
-
+    Draw_PDD(_total_mass_attenuation_coefficient_1_25MeV);
 }
