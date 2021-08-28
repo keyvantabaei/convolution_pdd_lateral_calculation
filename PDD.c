@@ -292,9 +292,9 @@ gPad->Update();
 auto legend = new TLegend(0.1,0.7,0.48,0.9);
 legend->SetHeader("","");
 legend->AddEntry(Tpdd,"Convolution Calculation 4MeV","p");
-legend->AddEntry(hist,"Monte Carlo Geant4 4MeV","p"); 
+legend->AddEntry(hist,"MC Geant4 4MeV","p"); 
 legend->AddEntry(Tpdd2,"Convolution Calculation 1.25MeV","p");
-legend->AddEntry(hist2,"Monte Carlo Geant4 1.25MeV","p"); 
+legend->AddEntry(hist2,"MC Geant4 1.25MeV","p"); 
 legend->SetBorderSize(0);
 legend->Draw();
 

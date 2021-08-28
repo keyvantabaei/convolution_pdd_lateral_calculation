@@ -22,7 +22,7 @@ const bool is_circular_field_size=false;
 const double _field_size_radius=5; //cm
 const bool is_rectangular_field_size=true;
 const double rectangular_field_size[]={10,10}; //cm
-const double depth=5; //cm
+const double depth=15; //cm
 
 
 double calculate_middle_of_the_voxel_r(double r_id)
@@ -64,7 +64,7 @@ double calculate_middle_of_the_voxel_theta(double interaction_point_theta_id)
 TH2D* CalculateKernel()
 {
         //read kernels
-        TFile* f =new TFile("kernel1_25mev.root");
+        TFile* f =new TFile("kernel_4_0mev.root");
         TH2D* edepPrimaryH = (TH2D*)f->Get("2d_PrimaryedepKernels");
         TH2D* edepFirstH = (TH2D*)f->Get("2D_FirstedepKernels");
         TH2D* edepSecondH = (TH2D*)f->Get("2D_SecondedepKernels");
@@ -123,33 +123,13 @@ bool check_voxel_have_interacted(double r_id,double theta_i,double lateral_dista
     double R=calculate_middle_of_the_voxel_r(r_id);
 
     //caculate off axis distance
-    double off_axis_distance_plus=lateral_distance_dose_calculation_point+R*TMath::Sin((theta*TMath::Pi())/(180));
-    double off_axis_distance_min=lateral_distance_dose_calculation_point-R*TMath::Sin((theta*TMath::Pi())/(180));    if(is_circular_field_size)
+    double field_boundary=rectangular_field_size[0]/2;
+    double off_axis_distance_min   = -R*TMath::Sin((theta*TMath::Pi())/(180))+lateral_distance_dose_calculation_point;
+    double off_axis_distance_plus  = R*TMath::Sin((theta*TMath::Pi())/(180))+lateral_distance_dose_calculation_point;  
 
-    // double coe=1;
-    // if( off_axis_distance_plus<= rectangular_field_size[0]/2 && off_axis_distance_plus>= (-1)*rectangular_field_size[1]/2 && off_axis_distance_min<(-1)*rectangular_field_size[1]/2 )
-    //   {
-    //     double r0 = (-1)*rectangular_field_size[1]/2 - off_axis_distance_plus;
-    //     double coe=(r0)/2*(R*TMath::Sin((theta*TMath::Pi())/(180)));
-    //     // cout<<r0<<endl;
-    //   }
-    // if(off_axis_distance_min<=(rectangular_field_size[0])/2 &&
-    //   off_axis_distance_min>=((-1)*rectangular_field_size[1])/2 &&
-    //   off_axis_distance_plus>(rectangular_field_size[0])/2)
-    //   {
-    //     double r0 = rectangular_field_size[1]/2 - off_axis_distance_min;
-    //     double coe=(r0)/2*(R*TMath::Sin((theta*TMath::Pi())/(180)));
-    //     cout<<R*TMath::Sin((theta*TMath::Pi())/(180))<<endl;
-    //   }
+    if(off_axis_distance_min>-field_boundary && off_axis_distance_plus<field_boundary)result=true;
+    else result=false;
 
-        if(
-         (off_axis_distance_plus<=rectangular_field_size[0]/2 &&
-         off_axis_distance_plus>=(-1)*rectangular_field_size[1]/2) ||
-         (off_axis_distance_min<=rectangular_field_size[0]/2 &&
-         off_axis_distance_min>=(-1)*rectangular_field_size[1]/2)
-         ){result=true;}
-        else result=false;
-cout<<result<<endl;
     return result;
 }
 
@@ -158,7 +138,7 @@ TTree* Normalize(TTree* Tdose)
     //find max
     double max=0;
     double dose;
-    Tdose->SetBranchAddress("d",&dose);
+    Tdose->SetBranchAddress("edep",&dose);
     for(int i=0; i<Tdose->GetEntries(); i++)
     {
         Tdose->GetEntry(i);
@@ -169,14 +149,14 @@ TTree* Normalize(TTree* Tdose)
     double pdd;
     double z;
     TTree* Tpdd = new TTree("Ntuple1", "Edep");
-    Tpdd->Branch("d", &pdd, "d/D");
-    Tpdd->Branch("z", &z, "z/D");
+    Tpdd->Branch("edep", &pdd, "d/D");
+    Tpdd->Branch("X", &z, "z/D");
 
     //loot to dose TTree and fill pdd
     double d;
     double Z;
-    Tdose->SetBranchAddress("d",&d);
-    Tdose->SetBranchAddress("z",&Z);
+    Tdose->SetBranchAddress("edep",&d);
+    Tdose->SetBranchAddress("X",&Z);
     for(int i=0; i<Tdose->GetEntries(); i++)
     {
         Tdose->GetEntry(i);
@@ -197,12 +177,16 @@ bool check_if_in_the_phantom(double r_id,double theta_id,double lateral_distance
     double R=calculate_middle_of_the_voxel_r(r_id);
 
     //calculate off axis distance and zepth respect to point of interaction
-    double off_axis_distance_plus=lateral_distance_dose_calculation_point+R*TMath::Sin((theta*TMath::Pi())/(180));
-    double off_axis_distance_min=lateral_distance_dose_calculation_point-R*TMath::Sin((theta*TMath::Pi())/(180));
+    double off_axis_distance_plus_right=lateral_distance_dose_calculation_point+R*TMath::Sin((theta*TMath::Pi())/(180));
+    double off_axis_distance_min_left=lateral_distance_dose_calculation_point-R*TMath::Sin((theta*TMath::Pi())/(180));
     double z=R*TMath::Cos((theta*TMath::Pi())/(180));
 
-    if( off_axis_distance_plus<=(_phantom_dimention[0])/2  && off_axis_distance_min>=((-1)*_phantom_dimention[0])/2 && (z>(-1)*depth && z<_phantom_dimention[2]-depth)  )result=true;
-    else result=false;
+    if(lateral_distance_dose_calculation_point<0)
+        if(  off_axis_distance_min_left>=((-1)*_phantom_dimention[0])/2 && (z>(-1)*depth && z<_phantom_dimention[2]-depth)  )result=true;
+        else result=false;
+    else
+        if( off_axis_distance_plus_right<=(_phantom_dimention[0])/2  && (z>(-1)*depth && z<_phantom_dimention[2]-depth)  )result=true;
+        else result=false;
     return result;
 }
 
@@ -219,13 +203,12 @@ TH2D* KERNEL=CalculateKernel();
 double dose;
 double z;
 TTree* pdd = new TTree("Ntuple1", "Edep");
-pdd->Branch("d", &dose, "d/D");
-pdd->Branch("z", &z, "z/D");
+pdd->Branch("edep", &dose, "edep/D");
+pdd->Branch("X", &z, "X/D");
 
 
 for(double lateral_distance : point)
 {
-    cout<<lateral_distance<<endl;
     for(int r_id=0;r_id<25;r_id++)
         for(int theta_id=0;theta_id<48;theta_id++)
         {
@@ -234,7 +217,11 @@ for(double lateral_distance : point)
                 {
                     double No_interaction=Calculate_Number_of_interaction(r_id,theta_id,mass_attenuation_coefficient);
                     double edk=GetEDK(r_id,theta_id,KERNEL);
+                    // if(lateral_distance<-5 || lateral_distance>5)
+                    //     dose+=No_interaction*edk*0.5;
+                    // else  dose+=No_interaction*edk;
                     dose+=No_interaction*edk;
+
                 }
         }
     z=lateral_distance;
@@ -246,21 +233,22 @@ for(double lateral_distance : point)
 auto Tpdd=Normalize(pdd);
 
 TCanvas* c1 = new TCanvas("c1", "  ");
-TFile* f =new TFile("pdd_1_25mev_5x5.root");
+TFile* f =new TFile("4mev.root");
 TTree* tree = (TTree*)f->Get("Ntuple1");
+auto com=Normalize(tree);
 Tpdd->SetMarkerStyle(26);
-tree->SetMarkerStyle(25); 
-Tpdd->Draw("d:z","","P"); 
+com->SetMarkerStyle(25); 
+Tpdd->Draw("edep:X","","P"); 
 TH2F *htemp = (TH2F*)c1->GetPrimitive("htemp"); 
-htemp->SetTitle("Percentage Depth Dose ; Depth (cm) ; Relative Dose");
-// tree->Draw("edep:((Z/10)*2+0.1)","","same");
+htemp->SetTitle("Lateral Profile ; off axis distance (cm) ; Relative Dose");
+com->Draw("edep:(X/5)-10","","sameP");
 gPad->Update();
 
 
 auto legend = new TLegend(0.1,0.7,0.48,0.9);
-legend->SetHeader("Circular Plan 5 cm raduis","C");
-legend->AddEntry(Tpdd,"Convolution Calculation");
-legend->AddEntry(tree,"Monte Carlo Geant4"); 
+legend->SetHeader("4Mev 10x10 cm^{2}_{}","C");
+legend->AddEntry(Tpdd,"Convolution Calculation","P");
+legend->AddEntry(com,"MC Geant4","p"); 
 legend->SetBorderSize(0);
 legend->Draw();
 
@@ -270,5 +258,5 @@ c1->Update();
 
 void LATERAL()
 {
-    Draw_PDD(_total_mass_attenuation_coefficient_1_25MeV);
+    Draw_PDD(_total_mass_attenuation_coefficient_4_0MeV);
 }
